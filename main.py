@@ -78,7 +78,8 @@ def get_unread_emails(service):
                     sender = header['value']
 
             if 'parts' in msg['payload']:
-                body, images = process_parts(msg['payload']['parts'])
+                body, images = process_parts(
+                    msg['payload']['parts'], service, msg)
 
                 # Send images to Telegram
                 for image_data in images:
@@ -91,19 +92,28 @@ def get_unread_emails(service):
             send_telegram_message(text)
 
 
-def process_parts(parts):
+def process_parts(parts, service, msg=None):
     images = []
     body = ""
     for part in parts:
+        if part['mimeType'].startswith('image/'):
+            print("part mimeType " + part['mimeType'])  # Debugging statement
+
         if part['mimeType'] == 'text/plain' and 'data' in part['body']:
             body = base64.urlsafe_b64decode(
                 part['body']['data']).decode('utf-8')
-        elif part['mimeType'].startswith('image/') and 'data' in part['body']:
+        elif part['mimeType'].startswith('image/') and 'filename' in part and 'body' in part:
             print("Found image part")  # Debugging statement
-            image_data = base64.urlsafe_b64decode(part['body']['data'])
+            if 'data' in part['body']:
+                image_data = base64.urlsafe_b64decode(part['body']['data'])
+            else:
+                attachment_id = part['body']['attachmentId']
+                attachment = service.users().messages().attachments().get(
+                    userId='me', messageId=msg['id'], id=attachment_id).execute()
+                image_data = base64.urlsafe_b64decode(attachment['data'])
             images.append(image_data)
         elif 'parts' in part:
-            sub_body, sub_images = process_parts(part['parts'])
+            sub_body, sub_images = process_parts(part['parts'], service, msg)
             body = body or sub_body
             images.extend(sub_images)
     return body, images
