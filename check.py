@@ -7,6 +7,8 @@ import requests
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+from googleapiclient.discovery import build
+from dotenv import load_dotenv
 
 # If modifying these SCOPES, delete the file token.json.
 SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
@@ -43,16 +45,41 @@ def get_unread_emails(service):
             msg = service.users().messages().get(
                 userId='me', id=message['id']).execute()
 
-            # Extract subject and sender
-            subject = ""
-            sender = ""
-            for header in msg['payload']['headers']:
-                if header['name'] == "Subject":
-                    subject = header['value']
-                elif header['name'] == "From":
-                    sender = header['value']
+            # Extract subject, sender, and body
+        subject = ""
+        sender = ""
+        body = ""
+        for header in msg['payload']['headers']:
+            if header['name'] == "Subject":
+                subject = header['value']
+            elif header['name'] == "From":
+                sender = header['value']
 
-            print(f"Subject: {subject}\nSender: {sender}\n")
+        if 'parts' in msg['payload']:
+            for part in msg['payload']['parts']:
+                if part['mimeType'] == 'text/plain':
+                    body = base64.urlsafe_b64decode(
+                        part['body']['data']).decode('utf-8')
+                    break
+
+        print(f"Subject: {subject}\nSender: {sender}\nBody: {body}\n")
+
+        text = f"From: {sender}\nSubject: {subject}\nBody:\n{body}"
+        send_telegram_message(text)
+
+
+def send_telegram_message(text):
+    bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+    chat_id = os.getenv('TELEGRAM_CHAT_ID')
+    url = f'https://api.telegram.org/{bot_token}/sendMessage?chat_id={chat_id}&text={text}'
+
+    response = requests.post(url)
+
+    if response.status_code == 200:
+        print("Message sent to Telegram successfully.")
+    else:
+        print(
+            f"Failed to send message to Telegram. Response status code: {response.status_code}")
 
 
 def main():
