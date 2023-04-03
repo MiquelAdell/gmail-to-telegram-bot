@@ -81,23 +81,29 @@ def get_unread_emails(service):
                 body, images = process_parts(
                     msg['payload']['parts'], service, msg)
 
+                # Send text to Telegram
+                send_telegram_message(
+                    f"From: {sender}\nSubject: {subject}\nBody:\n{body}")
+
                 # Send images to Telegram
                 for image_data in images:
                     print("Sending image to Telegram")  # Debugging statement
                     send_telegram_photo(image_data)
 
+            # Mark email as read
+            modify_request = {'removeLabelIds': ['UNREAD']}
+            service.users().messages().modify(
+                userId='me', id=msg['id'], body=modify_request).execute()
+
             print(f"Subject: {subject}\nSender: {sender}\nBody: {body}\n")
 
-            text = f"From: {sender}\nSubject: {subject}\nBody:\n{body}"
-            send_telegram_message(text)
 
-
-def process_parts(parts, service, msg=None):
+def process_parts(parts, service, msg):
     images = []
     body = ""
     for part in parts:
         if part['mimeType'].startswith('image/'):
-            print("part mimeType " + part['mimeType'])  # Debugging statement
+            print("part mimeType "+part['mimeType'])  # Debugging statement
 
         if part['mimeType'] == 'text/plain' and 'data' in part['body']:
             body = base64.urlsafe_b64decode(
