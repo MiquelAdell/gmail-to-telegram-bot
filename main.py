@@ -82,8 +82,7 @@ def get_unread_emails(service):
                     msg['payload']['parts'], service, msg)
 
                 # Send text to Telegram
-                send_telegram_message(
-                    f"From: {sender}\nSubject: {subject}\nBody:\n{body}")
+                send_telegram_message(subject, sender, body)
 
                 # Send images to Telegram
                 for image_data in images:
@@ -91,11 +90,11 @@ def get_unread_emails(service):
                     send_telegram_photo(image_data)
 
             # Mark email as read
-            modify_request = {'removeLabelIds': ['UNREAD']}
-            service.users().messages().modify(
-                userId='me', id=msg['id'], body=modify_request).execute()
+            # modify_request = {'removeLabelIds': ['UNREAD']}
+            # service.users().messages().modify(
+            #     userId='me', id=msg['id'], body=modify_request).execute()
 
-            print(f"Subject: {subject}\nSender: {sender}\nBody: {body}\n")
+            print(f"Subject: {subject}\nSender: {sender}\n")
 
 
 def process_parts(parts, service, msg):
@@ -125,7 +124,10 @@ def process_parts(parts, service, msg):
     return body, images
 
 
-def send_telegram_message(text):
+def send_telegram_message(subject, sender, body, retry_count=0):
+
+    text = f"From: {sender}\nSubject: {subject}\nBody:\n{body}"
+
     bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
     chat_id = os.getenv('TELEGRAM_CHAT_ID')
     encoded_text = urllib.parse.quote(text)
@@ -135,6 +137,27 @@ def send_telegram_message(text):
 
     if response.status_code == 200:
         print("Message sent to Telegram successfully.")
+    elif (response.status_code == 400 or response.status_code == 401) and retry_count == 0:
+        # truncate body if too long
+        if len(body) > 4096:
+            body = body[:4096] + "..."
+
+        print(
+            f"Failed to send message to Telegram with status code 400. Retrying... (Retry {retry_count + 1})")
+        print(
+            f"Body: {body}"
+        )
+        send_telegram_message(subject, sender, body,
+                              retry_count=retry_count + 1)
+
+    elif (response.status_code == 400 or response.status_code == 401) and retry_count == 1:
+        body = "Sending failed. Please check the email in the web browser."
+
+        print(
+            f"Failed to send message to Telegram with status code 400. Retrying... (Retry {retry_count + 1})")
+        send_telegram_message(subject, sender, body,
+                              retry_count=retry_count + 1)
+
     else:
         print(
             f"Failed to send message to Telegram. Response status code: {response.status_code} to url {url}")
