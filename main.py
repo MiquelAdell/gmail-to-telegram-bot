@@ -7,6 +7,7 @@ import requests
 import urllib.parse
 import io
 import mimetypes
+import re
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -82,7 +83,8 @@ def get_unread_emails(service):
                     msg['payload']['parts'], service, msg)
 
                 # Send text to Telegram
-                send_telegram_message(subject, sender, body)
+                filtered_body = filter_replies(body)
+                send_telegram_message(subject, sender, filtered_body)
 
                 # Send images to Telegram
                 for image_data in images:
@@ -124,8 +126,18 @@ def process_parts(parts, service, msg):
     return body, images
 
 
+def filter_replies(body):
+    # Find lines starting with '>', lines starting with 'On ... wrote:', and lines starting with a date pattern followed by the sender's email
+    reply_pattern = re.compile(
+        r'(^>.*$)|(^(On\s.*\s?wrote:)$)|(^El\s\d{1,2}\s\w+\s\d{4},\s[a-zA-Z]+.*<.*@.*>)(?:\n?.*)*', re.MULTILINE)
+    filtered_body = re.sub(reply_pattern, '', body)
+    return filtered_body.strip()
+
+
 def send_telegram_message(subject, sender, body, retry_count=0):
 
+    print("Sending message to Telegram with body length " +
+          str(len(body)))  # Debugging statement
     text = f"From: {sender}\nSubject: {subject}\nBody:\n{body}"
 
     bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
@@ -138,9 +150,8 @@ def send_telegram_message(subject, sender, body, retry_count=0):
     if response.status_code == 200:
         print("Message sent to Telegram successfully.")
     elif (response.status_code == 400 or response.status_code == 401) and retry_count == 0:
-        # truncate body if too long
-        if len(body) > 4096:
-            body = body[:4096] + "..."
+        if len(body) > 1000:
+            body = body[0:1000] + "…"
 
         print(
             f"Failed to send message to Telegram with status code 400. Retrying... (Retry {retry_count + 1})")
