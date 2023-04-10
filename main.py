@@ -92,9 +92,9 @@ def get_unread_emails(service):
                     send_telegram_photo(image_data)
 
             # Mark email as read
-            # modify_request = {'removeLabelIds': ['UNREAD']}
-            # service.users().messages().modify(
-            #     userId='me', id=msg['id'], body=modify_request).execute()
+            modify_request = {'removeLabelIds': ['UNREAD']}
+            service.users().messages().modify(
+                userId='me', id=msg['id'], body=modify_request).execute()
 
             print(f"Subject: {subject}\nSender: {sender}\n")
 
