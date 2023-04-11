@@ -1,3 +1,13 @@
+Sends unread messages to gmail and applies a label to them.
+
+# Dependencies
+
+```
+pip install --upgrade -r requirements.txt
+```
+
+The gmail account needs to have a "Telegram" label created.
+
 # Credentials
 
 get credentials from
@@ -15,12 +25,6 @@ it will open a browser window, login with your google account and allow the app 
 This should create a token.json with the user information
 
 Get bot information form telegram (I used botfather). Copy .env-example to .env and replace the values with your own.
-
-# Dependencies
-
-```
-pip install --upgrade -r requirements.txt
-```
 
 # Run
 

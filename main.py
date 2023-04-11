@@ -56,7 +56,7 @@ def send_telegram_photo(photo_data, caption=None):
 
 def get_unread_emails(service):
     # Query unread emails
-    query = "is:unread"
+    query = "is:unread -label:Telegram"
     results = service.users().messages().list(userId='me', q=query).execute()
     messages = results.get('messages', [])
 
@@ -91,12 +91,25 @@ def get_unread_emails(service):
                     print("Sending image to Telegram")  # Debugging statement
                     send_telegram_photo(image_data)
 
-            # Mark email as read
-            modify_request = {'removeLabelIds': ['UNREAD']}
-            service.users().messages().modify(
-                userId='me', id=msg['id'], body=modify_request).execute()
+            # Add "telegram" label
+            label_id = get_label_id(service, "Telegram")
+            if label_id:
+                modify_request = {'addLabelIds': [label_id]}
+                service.users().messages().modify(
+                    userId='me', id=msg['id'], body=modify_request).execute()
+            else:
+                print(
+                    "Label 'Telegram' not found. Please create the label in Gmail first.")
 
             print(f"Subject: {subject}\nSender: {sender}\n")
+
+
+def get_label_id(service, label_name):
+    labels = service.users().labels().list(userId='me').execute()
+    for label in labels['labels']:
+        if label['name'] == label_name:
+            return label['id']
+    return None
 
 
 def process_parts(parts, service, msg):
