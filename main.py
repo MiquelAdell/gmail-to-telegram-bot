@@ -74,14 +74,19 @@ def get_unread_emails(service):
             # Extract subject and sender
             subject = ""
             sender = ""
+            sender_email = ""
             for header in msg['payload']['headers']:
                 if header['name'] == "Subject":
                     subject = header['value']
                 elif header['name'] == "From":
                     sender = header['value']
+                    # Extract email address from the sender string
+                    match = re.search(r'[\w\.-]+@[\w\.-]+', sender)
+                    if match:
+                        sender_email = match.group()
 
-            # Skip processing the email if the sender is in the list of senders to skip
-            if sender in SENDERS_TO_SKIP:
+            # Skip processing the email if the sender's email is in the list of senders to skip
+            if sender_email in SENDERS_TO_SKIP:
                 print(f"Skipping email from: {sender}")
                 continue
 
