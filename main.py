@@ -18,6 +18,8 @@ from dotenv import load_dotenv
 # If modifying these SCOPES, delete the file token.json.
 SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 
+SENDERS_TO_SKIP = ['mailer@doodle.com']
+
 
 def get_credentials():
     creds = None
@@ -77,6 +79,11 @@ def get_unread_emails(service):
                     subject = header['value']
                 elif header['name'] == "From":
                     sender = header['value']
+
+            # Skip processing the email if the sender is in the list of senders to skip
+            if sender in SENDERS_TO_SKIP:
+                print(f"Skipping email from: {sender}")
+                continue
 
             if 'parts' in msg['payload']:
                 body, images = process_parts(
