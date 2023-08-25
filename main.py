@@ -1,6 +1,3 @@
-# requirements
-# pip install --upgrade google-api-python-client google-auth-httplib2 google-auth-oauthlib
-
 import base64
 import os
 import requests
@@ -18,7 +15,7 @@ from dotenv import load_dotenv
 # If modifying these SCOPES, delete the file token.json.
 SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 
-SENDERS_TO_SKIP = ['mailer@doodle.com']
+SENDERS_TO_SKIP = ['mailer@doodle.com', 'marketing@doodle.com']
 
 
 def get_credentials():
@@ -26,14 +23,26 @@ def get_credentials():
     if os.path.exists('token.json'):
         creds = Credentials.from_authorized_user_file('token.json', SCOPES)
     if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
+        try:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+        except RefreshError as e:
+            print(f"Refreshing token failed. Reason: {e}")
+            # Request a new token
             flow = InstalledAppFlow.from_client_secrets_file(
                 'credentials.json', SCOPES)
             creds = flow.run_local_server(port=0)
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
+
+            with open('token.json', 'w') as token:
+                token.write(creds.to_json())
+    return creds
+
+
+def ensure_token_valid(creds):
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            # Refresh the access token
+            creds.refresh(Request())
     return creds
 
 
@@ -103,17 +112,17 @@ def get_unread_emails(service):
                     print("Sending image to Telegram")  # Debugging statement
                     send_telegram_photo(image_data)
 
-            # Add "telegram" label
-            label_id = get_label_id(service, "Telegram")
-            if label_id:
-                modify_request = {'addLabelIds': [label_id]}
-                service.users().messages().modify(
-                    userId='me', id=msg['id'], body=modify_request).execute()
-            else:
-                print(
-                    "Label 'Telegram' not found. Please create the label in Gmail first.")
+                # Add "telegram" label
+                label_id = get_label_id(service, "Telegram")
+                if label_id:
+                    modify_request = {'addLabelIds': [label_id]}
+                    service.users().messages().modify(
+                        userId='me', id=msg['id'], body=modify_request).execute()
+                else:
+                    print(
+                        "Label 'Telegram' not found. Please create the label in Gmail first.")
 
-            print(f"Subject: {subject}\nSender: {sender}\n")
+                print(f"Subject: {subject}\nSender: {sender}\n")
 
 
 def get_label_id(service, label_name):
@@ -145,7 +154,8 @@ def process_parts(parts, service, msg):
                 image_data = base64.urlsafe_b64decode(attachment['data'])
             images.append(image_data)
         elif 'parts' in part:
-            sub_body, sub_images = process_parts(part['parts'], service, msg)
+            sub_body, sub_images = process_parts(
+                part['parts'], service, msg)
             body = body or sub_body
             images.extend(sub_images)
     return body, images
@@ -168,41 +178,31 @@ def send_telegram_message(subject, sender, body, retry_count=0):
     bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
     chat_id = os.getenv('TELEGRAM_CHAT_ID')
     encoded_text = urllib.parse.quote(text)
+
     url = f'https://api.telegram.org/{bot_token}/sendMessage?chat_id={chat_id}&text={encoded_text}'
 
-    response = requests.post(url)
+    response = requests.get(url)
 
     if response.status_code == 200:
         print("Message sent to Telegram successfully.")
-    elif (response.status_code == 400 or response.status_code == 401) and retry_count == 0:
-        if len(body) > 1000:
-            body = body[0:1000] + "…"
-
-        print(
-            f"Failed to send message to Telegram with status code 400. Retrying... (Retry {retry_count + 1})")
-        print(
-            f"Body: {body}"
-        )
-        send_telegram_message(subject, sender, body,
-                              retry_count=retry_count + 1)
-
-    elif (response.status_code == 400 or response.status_code == 401) and retry_count == 1:
-        body = "Sending failed. Please check the email in the web browser."
-
-        print(
-            f"Failed to send message to Telegram with status code 400. Retrying... (Retry {retry_count + 1})")
-        send_telegram_message(subject, sender, body,
-                              retry_count=retry_count + 1)
-
     else:
         print(
-            f"Failed to send message to Telegram. Response status code: {response.status_code} to url {url}")
+            f"Failed to send message to Telegram. Response status code: {response.status_code}")
+        if retry_count < 3:
+            print("Retrying...")
+            send_telegram_message(subject, sender, body, retry_count + 1)
+        else:
+            print("Failed after 3 retries.")
 
 
 def main():
     load_dotenv()
     creds = get_credentials()
     service = build('gmail', 'v1', credentials=creds)
+
+    # Ensure the token is valid before making API calls
+    creds = ensure_token_valid(creds)
+
     get_unread_emails(service)
 
 
